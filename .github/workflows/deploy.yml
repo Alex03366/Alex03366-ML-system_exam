@@ -1,0 +1,121 @@
+name: build and deploy ml model
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'model/**'
+      - 'serving/**'
+  workflow_dispatch: 
+
+env:
+  REGISTRY: cr.yandex 
+  IMAGE_NAME: churn-model
+  CR_REPO: ${{ secrets.YC_CR_REPO }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install dependencies
+        run: |
+          pip install pandas numpy scikit-learn
+
+      - name: test preprocessing
+        run: |
+          cd model
+          python -c "from preprocess import ChurnPreprocessor; print('preprocess ok')"
+
+      - name: test prediction
+        run: |
+          cd model
+          python -c "from predict import predict; print('predict ok')"
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: download dataset and train model
+        run: |
+          mkdir -p data model
+          wget -q https://raw.githubusercontent.com/IBM/telco-customer-churn-on-icp4d/master/data/Telco-Customer-Churn.csv -O data/Telco-Customer-Churn.csv
+          pip install pandas numpy scikit-learn mlflow
+          python model/train.py --data-path data/Telco-Customer-Churn.csv --output-dir model
+
+      - name: login to yandex cloud container registry
+        run: |
+          echo "${{ secrets.YC_SERVICE_ACCOUNT_KEY }}" | docker login \
+            --username json_key \
+            --password-stdin \
+            cr.yandex
+
+      - name: build docker image
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ env.CR_REPO }}/${{ env.IMAGE_NAME }}:latest \
+            -t ${{ env.REGISTRY }}/${{ env.CR_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -f serving/Dockerfile .
+
+      - name: push docker image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.CR_REPO }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.CR_REPO }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: verify image
+        run: |
+          docker run --rm -d -p 8000:8000 \
+            ${{ env.REGISTRY }}/${{ env.CR_REPO }}/${{ env.IMAGE_NAME }}:latest
+          sleep 10
+          curl --fail http://localhost:8000/health || exit 1
+          docker stop $(docker ps -q)
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: setup terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7"
+
+      - name: terraform init
+        working-directory: terraform
+        env:
+          YC_TOKEN: ${{ secrets.YC_TOKEN }}
+        run: terraform init
+
+      - name: terraform apply
+        working-directory: terraform
+        env:
+          YC_TOKEN: ${{ secrets.YC_TOKEN }}
+          TF_VAR_cloud_id: ${{ secrets.YC_CLOUD_ID }}
+          TF_VAR_folder_id: ${{ secrets.YC_FOLDER_ID }}
+        run: |
+          terraform apply -auto-approve
+
+  notify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: success notification
+        if: success()
+        run: echo "деплой успешно завершён"
+
+      - name: failure notification
+        if: failure()
+        run: echo "деплой завершился с ошибкой"
