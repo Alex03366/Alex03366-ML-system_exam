@@ -10,7 +10,6 @@ ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__))
 
 
 def load_artifacts():
-    """загружает препроцессор, модель и список признаков."""
     
     # загружаем препроцессор
     preprocessor_path = os.path.join(ARTIFACTS_DIR, "preprocessor.pkl")

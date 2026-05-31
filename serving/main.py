@@ -1,8 +1,7 @@
 import sys
 import os
 
-# добавляем корень проекта в путь для импорта model
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, '/app')
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel

@@ -123,18 +123,17 @@ def evaluate_and_decide(**context):
     
     if has_current:
         # загружаем текущую модель и смотрим её метрики
-        # (в реальном проекте метрики хранятся в mlflow или отдельно)
-        print("[INFO] текущая модель существует, сравниваем")
+        print("текущая модель существует, сравниваем")
         
         if new_recall > RECALL_THRESHOLD:
             decision = "deploy"
-            print(f"[INFO] решение: заменить модель (recall {new_recall:.4f} > {RECALL_THRESHOLD})")
+            print(f"решение: заменить модель (recall {new_recall:.4f} > {RECALL_THRESHOLD})")
         else:
             decision = "keep"
-            print(f"[INFO] решение: оставить текущую модель (recall {new_recall:.4f} <= {RECALL_THRESHOLD})")
+            print(f"решение: оставить текущую модель (recall {new_recall:.4f} <= {RECALL_THRESHOLD})")
     else:
         decision = "deploy"
-        print("[INFO] текущей модели нет, деплоим новую")
+        print("текущей модели нет, деплоим новую")
     
     ti.xcom_push(key='decision', value=decision)
 
@@ -144,7 +143,7 @@ def deploy_model(**context):
     decision = ti.xcom_pull(key='decision', task_ids='evaluate_and_decide')
     
     if decision != "deploy":
-        print("[INFO] пропускаем деплой")
+        print("пропускаем деплой")
         return
     
     print("деплой новой модели")
