@@ -74,7 +74,7 @@ Docker-образ сервинга собирается и деплоится ч
 ### Клонирование
 
 ```bash
-git clone https://github.com/rubashnyias/ML-system_exam.git
+git clone git clone https://github.com/Alex03366/Alex03366-ML-system_exam.git
 cd ML-system_exam
 ```
 ### Локальное обучение
